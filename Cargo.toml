@@ -4,7 +4,7 @@ version = "0.2.0" # Also update `html_root_url` in lib.rs
 authors = ["Lzu Tao <taolzu@gmail.com>"]
 categories = ["api-bindings", "os::windows-apis"]
 documentation = "https://docs.rs/junction/*/x86_64-pc-windows-msvc/junction/"
-edition = "2018"
+edition = "2021"
 exclude = [
     "/.github",
     "/HOW-TO-RELEASE.md",
@@ -24,7 +24,7 @@ version = "1"
 default-features = false
 
 [target.'cfg(windows)'.dependencies.winapi]
-version = "0.3"
+version = "0.3.9"
 features = [
     "errhandlingapi",
     "fileapi",

@@ -27,6 +27,7 @@ use winapi::um::winnt::*;
 
 pub static SE_RESTORE_NAME: [u16; 19] = utf16s!(b"SeRestorePrivilege\0");
 pub static SE_BACKUP_NAME: [u16; 18] = utf16s!(b"SeBackupPrivilege\0");
+type Handle = *mut core::ffi::c_void;
 
 pub fn open_reparse_point(reparse_point: &Path, rdwr: bool) -> io::Result<File> {
     let access = if rdwr {
@@ -56,7 +57,7 @@ fn set_privilege(rdwr: bool) -> io::Result<()> {
         if OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &mut handle) == 0 {
             return Err(io::Error::last_os_error());
         }
-        let handle = scopeguard::guard(handle, |h| {
+        let handle = scopeguard::guard(handle as *mut winapi::ctypes::c_void, |h| {
             CloseHandle(h);
         });
         let mut tp: TOKEN_PRIVILEGES = mem::zeroed();
@@ -71,7 +72,7 @@ fn set_privilege(rdwr: bool) -> io::Result<()> {
         tp.PrivilegeCount = 1;
         tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
         if AdjustTokenPrivileges(
-            *handle,
+            *handle as *mut winapi::ctypes::c_void,
             0,
             &mut tp,
             TOKEN_PRIVILEGES_SIZE,
@@ -94,7 +95,7 @@ fn set_privilege(rdwr: bool) -> io::Result<()> {
     }
 }
 
-pub fn get_reparse_data_point<'a>(handle: HANDLE, data: &'a mut [u8]) -> io::Result<&'a ReparseDataBuffer> {
+pub fn get_reparse_data_point<'a>(handle: Handle, data: &'a mut [u8]) -> io::Result<&'a ReparseDataBuffer> {
     // Redefine the above char array into a ReparseDataBuffer we can work with
     #[warn(clippy::cast_ptr_alignment)]
     let rdb = data.as_mut_ptr().cast::<ReparseDataBuffer>();
@@ -102,7 +103,7 @@ pub fn get_reparse_data_point<'a>(handle: HANDLE, data: &'a mut [u8]) -> io::Res
     let mut bytes_returned: u32 = 0;
     if unsafe {
         DeviceIoControl(
-            handle,
+            handle as *mut winapi::ctypes::c_void,
             FSCTL_GET_REPARSE_POINT,
             ptr::null_mut(),
             0,
@@ -118,11 +119,11 @@ pub fn get_reparse_data_point<'a>(handle: HANDLE, data: &'a mut [u8]) -> io::Res
     Ok(unsafe { &*rdb })
 }
 
-pub fn set_reparse_point(handle: HANDLE, rdb: *mut ReparseDataBuffer, len: u32) -> io::Result<()> {
+pub fn set_reparse_point(handle: Handle, rdb: *mut ReparseDataBuffer, len: u32) -> io::Result<()> {
     let mut bytes_returned: u32 = 0;
     if unsafe {
         DeviceIoControl(
-            handle,
+            handle as *mut winapi::ctypes::c_void,
             FSCTL_SET_REPARSE_POINT,
             rdb.cast(),
             len,
@@ -139,14 +140,14 @@ pub fn set_reparse_point(handle: HANDLE, rdb: *mut ReparseDataBuffer, len: u32) 
 }
 
 // See https://msdn.microsoft.com/en-us/library/windows/desktop/aa364560(v=vs.85).aspx
-pub fn delete_reparse_point(handle: HANDLE) -> io::Result<()> {
+pub fn delete_reparse_point(handle: Handle) -> io::Result<()> {
     let mut rgdb: ReparseGuidDataBuffer = unsafe { mem::zeroed() };
     rgdb.reparse_tag = IO_REPARSE_TAG_MOUNT_POINT;
     let mut bytes_returned: u32 = 0;
 
     if unsafe {
         DeviceIoControl(
-            handle,
+            handle as *mut winapi::ctypes::c_void,
             FSCTL_DELETE_REPARSE_POINT,
             (&mut rgdb as *mut ReparseGuidDataBuffer).cast(),
             u32::from(REPARSE_GUID_DATA_BUFFER_HEADER_SIZE),
